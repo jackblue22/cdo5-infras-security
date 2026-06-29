@@ -1,0 +1,77 @@
+aws_region  = "us-east-1"
+project     = "tf1-triage-hub"
+environment = "dev"
+owner       = "cdo-05"
+
+vpc_cidr = "10.50.0.0/16"
+az_count = 2
+
+# Cost-conscious default:
+# - false: private pods use VPC endpoints for AWS APIs, but cannot call public Slack/Jira directly.
+# - true: needed if worker/AI pods must call public internet endpoints.
+# In us-east-1, the handed-off AIO ECR image is in the same region.
+# Keep NAT disabled unless pods must call public SaaS endpoints such as Slack/Jira.
+enable_nat_gateway = false
+
+public_alb_allowed_cidrs = ["0.0.0.0/0"] # Prod: replace with VPN/admin CIDR or CloudFront/WAF path.
+app_target_port          = 8080
+ai_engine_port           = 8080
+otel_grpc_port           = 4317
+otel_http_port           = 4318
+
+enable_vpc_endpoints    = true
+enable_bedrock_endpoint = false
+
+cluster_version                      = "1.30"
+cluster_endpoint_public_access       = true
+cluster_endpoint_private_access      = true
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
+# Recommended for EKS + AI Engine demo if your AWS Free Tier/credit plan allows it.
+# Fallback cheapest infra-only option: ["t3.micro"] or ["t3.small"].
+node_instance_types = ["m7i-flex.large"]
+node_ami_type       = "AL2023_x86_64_STANDARD"
+node_desired_size   = 2
+node_min_size       = 1
+node_max_size       = 2
+node_disk_size      = 30
+
+# Enable for m7i-flex/t3.small+ demo clusters or when workloads require PVC/EBS volumes.
+# Disable only for tiny t3.micro infra-only validation.
+enable_ebs_csi_addon = true
+
+# Optional: set to your IAM role/user ARN for EKS API access entry.
+admin_principal_arn = ""
+
+log_retention_days   = 14
+audit_retention_days = 90
+
+# Enable before bucket creation if you need immutable audit evidence.
+enable_s3_object_lock          = false
+s3_object_lock_retention_days  = 90
+
+enable_kms = true
+
+queue_visibility_timeout_seconds = 120
+queue_message_retention_seconds  = 345600
+dlq_message_retention_seconds    = 1209600
+max_receive_count                = 5
+enable_worker_dlq_replay_permissions = false
+
+enable_ingest_lambda_function_url = true
+ingest_function_url_auth_type     = "AWS_IAM"
+lambda_reserved_concurrency       = -1
+
+# Optional alarm email. You must confirm SNS subscription email after apply.
+alarm_email = ""
+
+enable_waf      = false
+alb_arn_for_waf = ""
+waf_rate_limit  = 2000
+
+# Usually disabled if the AWS account already has organization/account CloudTrail.
+enable_cloudtrail = false
+
+# Enable only if AI Engine calls Bedrock directly.
+enable_ai_bedrock_policy = false
+bedrock_model_arns       = []

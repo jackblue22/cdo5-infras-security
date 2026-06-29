@@ -1,0 +1,48 @@
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+*.zip
+
+
+# Terraform local cache
+.terraform/
+.terraform.tfstate.lock.info
+
+# Terraform state - never commit
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Local variable files may contain secrets/account-specific config
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+
+# Terraform plan outputs
+*.tfplan
+*.plan
+plan.out
+tfplan
+
+# Override files are local-only
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local CLI config
+.terraformrc
+terraform.rc
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/

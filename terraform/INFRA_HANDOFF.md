@@ -4,8 +4,9 @@
 **Vai trò của team này:** TF1 infrastructure + security baseline  
 **Team phối hợp chính:** AIO-01  
 **AWS region mặc định:** `us-east-1`  
-**Environment đã test:** `dev`  
-**Trạng thái hiện tại:** đã apply/verify thành công, sau đó đã `terraform destroy` sạch để tránh cost  
+**Environment đã test:** `dev`, `sandbox`  
+**Environment tương thích CI/layout infra:** `sandbox`  
+**Trạng thái hiện tại:** `sandbox` đã apply/verify thành công và đang chạy trên AWS  
 **Ngày verify:** 2026-06-30
 
 File này là bản handoff để teammate biết:
@@ -24,7 +25,9 @@ File này là bản handoff để teammate biết:
 
 Terraform trong folder này là **Milestone 1 AWS infrastructure baseline**, không phải full platform deployment.
 
-Đã kiểm chứng:
+Region triển khai mặc định là `us-east-1` và nên giữ nguyên cho tới khi cả CDO-05/AIO-01 cùng đổi. Lý do: AI Engine image handoff, cross-account ECR pull permission và lần verify EKS trước đó đều đang theo `us-east-1`.
+
+Đã kiểm chứng trước đó với `dev`:
 
 ```text
 terraform init: success
@@ -38,23 +41,40 @@ terraform destroy: success, 117 resources destroyed
 terraform state list sau destroy: empty
 ```
 
+Đã kiểm chứng hiện tại với `sandbox`:
+
+```text
+terraform init: success
+terraform validate: success
+terraform apply: success, 117 added, 0 changed, 0 destroyed
+terraform plan sau apply: No changes
+aws_region: us-east-1
+EKS cluster: tf1-triage-hub-sandbox ACTIVE, version 1.30
+EKS nodes: 2 nodes Ready
+EKS add-ons: aws-ebs-csi-driver, coredns, kube-proxy, vpc-cni
+kube-system pods: Running
+terraform state list count: 134 addresses
+```
+
 Hiện tại:
 
 ```text
-Không còn stack dev đang chạy trên AWS từ Terraform state này.
-Muốn demo lại thì chạy terraform apply lại từ environments/dev.
-Resource IDs/URLs sẽ thay đổi sau lần apply mới.
+Stack sandbox đang chạy trên AWS trong us-east-1.
+Không destroy nếu team khác cần tiếp tục deploy workload lên EKS.
+Nếu muốn tránh cost sau demo/handoff, chạy terraform destroy trong environments/sandbox.
 ```
 
-Lệnh chạy lại:
+Lệnh dùng để apply lại nếu sandbox đã bị destroy:
 
 ```powershell
-cd D:\XBrain\Projects\xbrain-learners\capstone-phase2\temp\aiops\terraform\environments\dev
+cd D:\XBrain\Projects\xbrain-learners\capstone-phase2\temp\aiops\terraform\environments\sandbox
 terraform init
 terraform validate
 terraform plan -input=false
 terraform apply -auto-approve -input=false
 ```
+
+Nếu muốn dùng đúng path đã apply/verify trước đó, thay `environments\sandbox` bằng `environments\dev`.
 
 Lệnh destroy sau demo:
 
@@ -73,7 +93,7 @@ CDO-05 đã hoàn thành phần **AWS infrastructure foundation** đủ để te
 
 | Mảng | Trạng thái | Ghi chú |
 |---|---|---|
-| Terraform module layout | Done | Có `environments/dev`, `staging`, `prod` và các module riêng. |
+| Terraform module layout | Done | Có `environments/sandbox`, `dev`, `staging`, `prod` và các module riêng. |
 | Region mặc định | Done | `us-east-1`, khớp yêu cầu hiện tại. |
 | VPC/network baseline | Done | Public/private subnet, route table, Internet Gateway, VPC endpoints. |
 | Security group baseline | Done | ALB, app, aiops worker, AI engine, integration, observability, VPC endpoints. |
@@ -87,8 +107,8 @@ CDO-05 đã hoàn thành phần **AWS infrastructure foundation** đủ để te
 | Secrets baseline | Done | Secrets Manager secret containers. |
 | Encryption | Done | KMS key/alias support. |
 | AWS pipeline monitor | Done | CloudWatch dashboard, alarms, log groups, SNS topic. |
-| Apply verification | Done | Apply succeeded, EKS nodes/add-ons healthy. |
-| Cleanup | Done | Destroy succeeded, no resources left in state. |
+| Apply verification | Done | `sandbox` apply succeeded, EKS nodes/add-ons healthy, post-apply plan has no changes. |
+| Cleanup | Not yet for sandbox | `dev` test run was destroyed earlier; current `sandbox` stack is intentionally still running for handoff. |
 
 Chưa làm trong scope Terraform hiện tại:
 
@@ -98,6 +118,25 @@ AI Engine deployment, CDO Worker deployment, app demo, NetworkPolicy YAML,
 Pod Security labels, RBAC YAML, Service/Ingress manifests.
 ```
 
+### 2.1 Mapping với folder `infra`
+
+Folder `temp/aiops/infra` là reference về organization/path cho CI/CD và teammate, không phải source code chính để deploy. Folder `temp/aiops/terraform` vẫn là runtime source vì đây là bộ đã apply/verify được.
+
+Mapping hiện tại:
+
+| `infra` reference | `terraform` runtime source | Ghi chú |
+|---|---|---|
+| `environments/sandbox` | `environments/sandbox` | Đã thêm để team/CI có path tương tự `infra`. |
+| `modules/networking` | `modules/networking` alias từ `modules/network` | Runtime module tự quản lý VPC, subnets, routes, NAT option và VPC endpoints. |
+| `modules/eks` | `modules/eks` | Runtime module có EKS cluster, managed node group, OIDC provider và managed add-ons. |
+| `modules/eks-addons` | `modules/eks` + future `k8s-bootstrap` | Managed add-ons đã có trong EKS module; Helm add-ons như ArgoCD/Prometheus/Loki/Grafana chưa thuộc Milestone 1. |
+| `modules/incident-ingest` | `modules/incident-ingest` alias từ `modules/ingest-lambda` + root modules `queue/storage/security` | Runtime implementation đầy đủ hơn scaffold cũ: Lambda ingest, SQS FIFO/DLQ, DynamoDB, S3 audit, KMS/Secrets. |
+| `modules/ecr` | `modules/ecr` | Tạo repo image cho workload tương lai. |
+| `modules/github-oidc` | Chưa làm trong Milestone 1 | CI/CD OIDC nên làm ở phase deploy/pipeline. |
+| `modules/external-secrets` | Chưa làm trong Milestone 1 | Secret containers đã ở AWS Secrets Manager; sync vào Kubernetes thuộc cluster bootstrap/workload phase. |
+
+Không nên copy code từ `infra/modules/*` đè lên `terraform/modules/*`, vì scaffold `infra` thiếu nhiều phần security/queue/audit đã được verify trong bộ `terraform`.
+
 ---
 
 ## 3. Terraform tạo những gì khi apply?
@@ -105,6 +144,8 @@ Pod Security labels, RBAC YAML, Service/Ingress manifests.
 ### 3.1 Network
 
 Module: `modules/network`
+
+Sandbox compatibility path: `modules/networking` alias từ `modules/network`.
 
 Tạo:
 
@@ -219,6 +260,8 @@ metadata:
 ### 3.5 Alert Ingest
 
 Module: `modules/ingest-lambda`
+
+Sandbox compatibility path: `modules/incident-ingest` alias từ `modules/ingest-lambda`.
 
 Tạo:
 
@@ -799,28 +842,42 @@ Cần:
 
 ## 8. Những điểm cần nói rõ khi handoff
 
-### 8.1 Không còn resource đang chạy
+### 8.1 Sandbox stack đang chạy
 
-Vì đã destroy:
+Hiện tại sandbox đã được apply thành công và đang tồn tại trên AWS:
 
 ```text
-Các ARN/URL/SG ID từng thấy trong output cũ chỉ là evidence của lần apply test.
-Khi apply lại, ID/URL mới có thể khác.
+AWS account: 056755224027
+Region: us-east-1
+Cluster: tf1-triage-hub-sandbox
+Terraform root: environments/sandbox
+Post-apply plan: No changes
+EKS nodes: 2 Ready
+EKS add-ons: aws-ebs-csi-driver, coredns, kube-proxy, vpc-cni
+```
+
+Không destroy nếu team khác cần deploy workload tiếp lên cluster này. Khi demo/handoff xong và muốn tránh cost, chạy:
+
+```powershell
+cd D:\XBrain\Projects\xbrain-learners\capstone-phase2\temp\aiops\terraform\environments\sandbox
+terraform destroy -auto-approve -input=false
+terraform state list
 ```
 
 ### 8.2 Apply một cú có được không?
 
 Được nếu:
 
-- Chạy từ đúng `environments/dev`.
+- Chạy từ đúng `environments/sandbox` hoặc `environments/dev`.
 - State sạch hoặc dùng đúng remote/shared state.
-- AWS account/region không còn resource trùng tên từ lần apply khác.
+- AWS account/region `us-east-1` không còn resource trùng tên từ lần apply khác.
 
 Không nên nếu:
 
 - Copy folder sang repo khác nhưng không copy state.
 - Có người khác đã apply cùng name prefix.
 - Chưa thống nhất remote backend.
+- Sandbox hiện đang chạy nhưng teammate dùng một state khác, vì khi đó Terraform có thể cố tạo resource trùng tên.
 
 ### 8.3 Terraform không deploy full Kubernetes platform
 
@@ -842,7 +899,7 @@ Hiện tại **không cần sửa lớn `02_infra_design.md` hoặc `03_security
 Lý do:
 
 - `02` đã nói Milestone 1 là AWS infra + security baseline, chưa deploy workload Kubernetes.
-- `02` đã nói Terraform từng apply/verify EKS/node/add-ons healthy rồi destroy sạch để tránh cost.
+- `02` đã nói Terraform từng apply/verify EKS/node/add-ons healthy; hiện sandbox cũng đã apply lại thành công để handoff.
 - `03` đã cover IAM, secrets, network, audit, tenant isolation, NetworkPolicy, Pod Security/RBAC ở mức design.
 
 Nếu muốn làm docs chặt hơn nữa, chỉ cần bổ sung nhẹ sau này:
@@ -861,7 +918,11 @@ CDO-05 đã hoàn thành và verify AWS infrastructure baseline bằng Terraform
 ```
 
 ```text
-Stack dev đã được destroy sau verify để tránh cost; apply lại được từ environments/dev.
+Stack dev đã được destroy sau verify; stack sandbox hiện đang chạy để team khác tiếp tục deploy workload.
+```
+
+```text
+Apply/handoff path hiện tại: terraform/environments/sandbox, region us-east-1, cluster tf1-triage-hub-sandbox.
 ```
 
 ```text
@@ -879,4 +940,3 @@ Team khác cần cung cấp workload manifests/images/contracts/secrets/observab
 ```text
 Security boundary chính: AI Engine không public, không consume SQS, không giữ Jira/Slack token; Worker dùng IRSA least privilege; raw telemetry không đi vào SQS.
 ```
-

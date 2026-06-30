@@ -1,6 +1,8 @@
 # TF1 Triage Hub - AWS Terraform
 
-Terraform trong folder này dựng **Milestone 1 infrastructure baseline** cho CDO-05:
+Terraform trong folder này dựng **Milestone 1 infrastructure baseline** cho CDO-05.
+
+Flow infra hỗ trợ:
 
 ```text
 Alertmanager
@@ -13,21 +15,44 @@ Alertmanager
 -> Slack/Jira payload hoặc integration layer
 ```
 
-Terraform chưa deploy Kubernetes workload như Demo App, Prometheus, Loki, Grafana, CDO Correlator Worker hoặc AI Engine. Các phần đó thuộc workload/deployment layer sau khi infra base đã sẵn sàng.
+Terraform chưa deploy Kubernetes workload như Demo App, Prometheus, Loki, Grafana, CDO Correlator Worker hoặc AI Engine. Các phần đó thuộc workload/deployment layer sau khi AWS infra base đã sẵn sàng.
 
-## Tạo Ra Gì?
+## Project Layout
 
-| Nhóm | Resource |
-|---|---|
-| Network | VPC, public/private subnets, route tables, VPC endpoints, optional NAT Gateway |
-| Runtime | EKS cluster, managed node group, EKS managed add-ons, ECR repositories |
-| Alert reliability | Ingest Lambda, SQS FIFO incident queue, FIFO DLQ |
-| State/audit | DynamoDB `incident_state`, S3 audit/evidence bucket |
-| Security | KMS key, Secrets Manager placeholders, IAM least privilege, IRSA roles |
-| Monitoring | CloudWatch log groups, alarms, SNS topic, dashboard |
-| Optional prod controls | WAF WebACL, CloudTrail |
+```text
+terraform/
+├── environments/
+│   ├── dev/
+│   ├── staging/
+│   └── prod/
+├── modules/
+│   ├── network/
+│   ├── security-groups/
+│   ├── security/
+│   ├── eks/
+│   ├── iam-irsa/
+│   ├── storage/
+│   ├── queue/
+│   ├── ingest-lambda/
+│   ├── ecr/
+│   ├── monitoring/
+│   └── optional-controls/
+├── lambda/
+│   └── ingest/
+└── docs/
+```
 
-## Current Demo Defaults
+Mỗi environment là một Terraform root riêng. Chạy Terraform trong `environments/<env>`, không chạy ở root `terraform/`.
+
+## Environments
+
+| Environment | Mục đích | Ghi chú |
+|---|---|---|
+| `dev` | Demo/capstone apply nhanh | Giữ cost thấp, public EKS endpoint đang mở theo default dev. |
+| `staging` | Kiểm thử gần prod | Dùng CIDR allowlist cho EKS public endpoint. |
+| `prod` | Production-like template | Bật NAT, WAF, CloudTrail, S3 Object Lock trong `terraform.tfvars.example`. |
+
+## Current Dev Defaults
 
 ```hcl
 aws_region              = "us-east-1"
@@ -42,10 +67,10 @@ lambda_reserved_concurrency = -1
 
 Lý do chọn `m7i-flex.large`: x86_64, 2 vCPU, 8 GiB RAM, phù hợp hơn `t3.micro` cho EKS add-ons + AI Engine + worker + observability demo. Không dùng `t4g` nếu chưa xác nhận AI image có ARM64 manifest.
 
-## Cách Chạy
+## Cách Chạy Dev
 
 ```powershell
-cd D:\XBrain\Projects\xbrain-learners\capstone-phase2\temp\aiops\terraform
+cd D:\XBrain\Projects\xbrain-learners\capstone-phase2\temp\aiops\terraform\environments\dev
 Copy-Item terraform.tfvars.example terraform.tfvars
 terraform init
 terraform fmt -recursive
@@ -71,29 +96,32 @@ terraform destroy -auto-approve -input=false
 terraform state list
 ```
 
-## Validation Đã Chạy
+## Validation
 
-Lần apply gần nhất đã thành công với:
+Sau khi module hóa, đã chạy:
 
 ```text
-terraform apply from empty state: success, one-shot, no manual mid-run fix
-terraform plan after apply: No changes
-node group: ACTIVE, 2 x m7i-flex.large
-AMI: AL2023_x86_64_STANDARD
-add-ons: vpc-cni, kube-proxy, coredns, aws-ebs-csi-driver
-kubectl nodes: 2 Ready
-kube-system pods: aws-node, kube-proxy, coredns, ebs-csi Running
-terraform destroy: Destroy complete, 117 resources destroyed
-terraform state list: empty
+terraform fmt -recursive
+terraform init -input=false -lockfile=readonly
+terraform validate
+terraform plan -input=false -no-color
+```
+
+Kết quả `dev`:
+
+```text
+terraform validate: Success
+terraform plan: 117 to add, 0 to change, 0 to destroy
+aws_region output: us-east-1
+eks_cluster_name output: tf1-triage-hub-dev
 ```
 
 ## Notes Quan Trọng
 
-- EKS add-ons được tách thứ tự:
-  - Pre-node: `vpc-cni`, `kube-proxy`
-  - Post-node: `coredns`, `aws-ebs-csi-driver`
-- EBS CSI dùng IRSA riêng: `tf1-triage-hub-dev-ebs-csi-driver-irsa`.
-- SQS là FIFO queue, không phải standard queue.
+- Resource logic được refactor từ bộ Terraform đã từng apply thành công, không viết lại design mới.
+- Module hóa làm đổi Terraform resource address, ví dụ `aws_vpc.this` thành `module.network.aws_vpc.this`.
+- Nếu đã có state thật từ layout cũ, cần migration bằng `moved` block hoặc `terraform state mv`.
+- Nếu repo/team chưa apply layout cũ, có thể dùng module layout này như fresh infrastructure.
 - SQS chỉ giữ alert event, không giữ raw metrics/logs.
 - DynamoDB giữ workflow state/idempotency/ticket pointer.
 - S3 giữ bounded evidence/audit artifacts.
@@ -107,10 +135,4 @@ AIO-01 image hiện ở ECR `us-east-1`:
 589077667575.dkr.ecr.us-east-1.amazonaws.com/tf1-ai-triage-engine:v1.0.0
 ```
 
-Terraform hiện mặc định dựng EKS private nodes ở `us-east-1`, cùng region với AIO ECR image. Vì vậy workload AI Engine có thể dùng image handoff trực tiếp nếu cross-account pull permission vẫn còn hiệu lực.
-
-Nếu sau này đổi infra sang region khác, cần chọn một trong ba hướng:
-
-1. Copy/replicate image AIO vào ECR cùng region với EKS. Recommended cho private nodes.
-2. Bật `enable_nat_gateway = true` để private nodes pull cross-region/public ECR. Chạy được nhưng tốn cost hơn.
-3. Giữ toàn bộ runtime ở `us-east-1` nếu team thống nhất chạy cùng region với AIO/Bedrock.
+Terraform mặc định dựng EKS private nodes ở `us-east-1`, cùng region với AIO ECR image. Vì vậy workload AI Engine có thể dùng image handoff trực tiếp nếu cross-account pull permission vẫn còn hiệu lực.

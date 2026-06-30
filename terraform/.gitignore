@@ -1,13 +1,3 @@
-.terraform/
-terraform.tfstate
-terraform.tfstate.*
-*.tfvars
-*.tfvars.json
-crash.log
-crash.*.log
-*.zip
-
-
 # Terraform local cache
 .terraform/
 .terraform.tfstate.lock.info
@@ -21,13 +11,16 @@ crash.*.log
 # Local variable files may contain secrets/account-specific config
 *.tfvars
 *.tfvars.json
-!terraform.tfvars.example
+!examples/*.tfvars.example
 
 # Terraform plan outputs
 *.tfplan
 *.plan
 plan.out
 tfplan
+
+# Generated archives
+*.zip
 
 # Override files are local-only
 override.tf

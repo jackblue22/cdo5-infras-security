@@ -161,3 +161,35 @@ resource "aws_dynamodb_table" "incident_state" {
     Name = "${var.name_prefix}-incident-state"
   }
 }
+
+resource "aws_dynamodb_table" "idempotency" {
+  name         = "${var.name_prefix}-idempotency"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "PK"
+
+  deletion_protection_enabled = var.environment == "prod"
+  stream_enabled              = false
+
+  attribute {
+    name = "PK"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  ttl {
+    attribute_name = var.dynamodb_ttl_attribute
+    enabled        = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = var.enable_kms ? var.kms_key_arn : null
+  }
+
+  tags = {
+    Name = "${var.name_prefix}-idempotency"
+  }
+}

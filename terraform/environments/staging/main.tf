@@ -115,10 +115,14 @@ module "ingest_lambda" {
   aws_region                        = var.aws_region
   account_id                        = data.aws_caller_identity.current.account_id
   partition                         = data.aws_partition.current.partition
-  incident_queue_url                = module.queue.incident_queue_url
-  incident_queue_arn                = module.queue.incident_queue_arn
+  normalized_alerts_queue_url       = module.queue.normalized_alerts_queue_url
+  normalized_alerts_queue_arn       = module.queue.normalized_alerts_queue_arn
   webhook_signing_secret_arn        = module.security.secret_arns["webhook_signing_key"]
   audit_bucket_name                 = module.storage.audit_bucket_name
+  audit_bucket_arn                  = module.storage.audit_bucket_arn
+  idempotency_table_name            = module.storage.idempotency_table_name
+  idempotency_table_arn             = module.storage.idempotency_table_arn
+  s3_prefix_pre_correlation         = "pre-correlation"
   log_group_name                    = "/aws/lambda/${local.name_prefix}-ingest-alert"
   log_retention_days                = var.log_retention_days
   source_dir                        = "${path.root}/../../lambda/ingest"

@@ -122,6 +122,8 @@ terraform validate
 terraform plan -input=false -no-color
 terraform apply -auto-approve -input=false -no-color
 terraform plan -input=false -no-color
+terraform destroy -auto-approve -input=false -no-color
+terraform state list
 ```
 
 Kết quả `sandbox` hiện tại:
@@ -134,6 +136,9 @@ aws_region output: us-east-1
 eks_cluster_name output: tf1-triage-hub-sandbox
 kubectl get nodes: 2 Ready
 kube-system pods: Running
+terraform destroy: 117 resources destroyed
+terraform state list after destroy: empty
+aws eks describe-cluster after destroy: ResourceNotFoundException
 ```
 
 Ghi chú: sandbox đã được validate/plan bằng provider cache local. Nếu máy teammate chưa có provider cache, `terraform init` sẽ cần internet để tải provider từ HashiCorp registry.

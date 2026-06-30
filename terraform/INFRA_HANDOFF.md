@@ -6,7 +6,7 @@
 **AWS region mặc định:** `us-east-1`  
 **Environment đã test:** `dev`, `sandbox`  
 **Environment tương thích CI/layout infra:** `sandbox`  
-**Trạng thái hiện tại:** `sandbox` đã apply/verify thành công và đang chạy trên AWS  
+**Trạng thái hiện tại:** `sandbox` đã apply/verify thành công, sau đó đã `terraform destroy` sạch để tránh cost  
 **Ngày verify:** 2026-06-30
 
 File này là bản handoff để teammate biết:
@@ -54,14 +54,17 @@ EKS nodes: 2 nodes Ready
 EKS add-ons: aws-ebs-csi-driver, coredns, kube-proxy, vpc-cni
 kube-system pods: Running
 terraform state list count: 134 addresses
+terraform destroy: success, 117 resources destroyed
+terraform state list sau destroy: empty
+aws eks describe-cluster sau destroy: ResourceNotFoundException
 ```
 
 Hiện tại:
 
 ```text
-Stack sandbox đang chạy trên AWS trong us-east-1.
-Không destroy nếu team khác cần tiếp tục deploy workload lên EKS.
-Nếu muốn tránh cost sau demo/handoff, chạy terraform destroy trong environments/sandbox.
+Không còn stack sandbox đang chạy trên AWS từ Terraform state này.
+Muốn demo lại hoặc bàn giao cho team deploy workload thì chạy terraform apply lại từ environments/sandbox.
+Resource IDs/URLs sẽ thay đổi sau lần apply mới.
 ```
 
 Lệnh dùng để apply lại nếu sandbox đã bị destroy:
@@ -108,7 +111,7 @@ CDO-05 đã hoàn thành phần **AWS infrastructure foundation** đủ để te
 | Encryption | Done | KMS key/alias support. |
 | AWS pipeline monitor | Done | CloudWatch dashboard, alarms, log groups, SNS topic. |
 | Apply verification | Done | `sandbox` apply succeeded, EKS nodes/add-ons healthy, post-apply plan has no changes. |
-| Cleanup | Not yet for sandbox | `dev` test run was destroyed earlier; current `sandbox` stack is intentionally still running for handoff. |
+| Cleanup | Done | `dev` và `sandbox` đều đã destroy sau verify; hiện không còn resource trong Terraform state. |
 
 Chưa làm trong scope Terraform hiện tại:
 
@@ -842,9 +845,9 @@ Cần:
 
 ## 8. Những điểm cần nói rõ khi handoff
 
-### 8.1 Sandbox stack đang chạy
+### 8.1 Sandbox stack đã destroy sạch
 
-Hiện tại sandbox đã được apply thành công và đang tồn tại trên AWS:
+Sandbox đã được apply thành công, verify xong, sau đó destroy sạch để tránh cost:
 
 ```text
 AWS account: 056755224027
@@ -854,14 +857,17 @@ Terraform root: environments/sandbox
 Post-apply plan: No changes
 EKS nodes: 2 Ready
 EKS add-ons: aws-ebs-csi-driver, coredns, kube-proxy, vpc-cni
+Destroy: 117 resources destroyed
+Terraform state list: empty
+EKS describe after destroy: ResourceNotFoundException
 ```
 
-Không destroy nếu team khác cần deploy workload tiếp lên cluster này. Khi demo/handoff xong và muốn tránh cost, chạy:
+Nếu team khác cần deploy workload, apply lại từ path này:
 
 ```powershell
 cd D:\XBrain\Projects\xbrain-learners\capstone-phase2\temp\aiops\terraform\environments\sandbox
-terraform destroy -auto-approve -input=false
-terraform state list
+terraform init
+terraform apply -auto-approve -input=false
 ```
 
 ### 8.2 Apply một cú có được không?
@@ -877,7 +883,7 @@ Không nên nếu:
 - Copy folder sang repo khác nhưng không copy state.
 - Có người khác đã apply cùng name prefix.
 - Chưa thống nhất remote backend.
-- Sandbox hiện đang chạy nhưng teammate dùng một state khác, vì khi đó Terraform có thể cố tạo resource trùng tên.
+- Một teammate khác đã apply cùng name prefix bằng state khác.
 
 ### 8.3 Terraform không deploy full Kubernetes platform
 
@@ -918,7 +924,7 @@ CDO-05 đã hoàn thành và verify AWS infrastructure baseline bằng Terraform
 ```
 
 ```text
-Stack dev đã được destroy sau verify; stack sandbox hiện đang chạy để team khác tiếp tục deploy workload.
+Stack dev và sandbox đều đã được destroy sau verify để tránh cost.
 ```
 
 ```text
